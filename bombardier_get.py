@@ -21,20 +21,22 @@ logging.basicConfig(level=logging.DEBUG,
                     filename=args.logfile,
                     filemode='w',
                     )
-DONE_LEVEL_NUM = 25
-logging.addLevelName( DONE_LEVEL_NUM,  "\033[1;34m%s\033[1;0m"   % "DONE" )
+#DONE_LEVEL_NUM = 25
+#logging.addLevelName( DONE_LEVEL_NUM,  "\033[1;34m%s\033[1;0m"   % "DONE" )
 logging.addLevelName( logging.INFO,    "\033[1;32m%s\033[1;0m"   % logging.getLevelName(logging.INFO) )     # Green
 logging.addLevelName( logging.WARNING, "\033[1;33m%s\033[1;0m"   % logging.getLevelName(logging.WARNING) )  # Yellow
 logging.addLevelName( logging.ERROR,   "\033[1;31;1m%s\033[1;0m" % logging.getLevelName(logging.ERROR) )    # Bold red
 logging.getLogger("requests").setLevel(logging.WARNING)  # Squelch any requests' logging lower than WARNING
 
+"""
 def done(self, message, *args, **kws):
     if logging.Logger.isEnabledFor(DONE_LEVEL_NUM):
         logging.Logger._log(DONE_LEVEL_NUM, message, args, **kws)
 logging.Logger.done = done
+"""
 
 console = logging.StreamHandler()  # Log to the console
-console.setLevel(logging.DEBUG)
+console.setLevel(logging.INFO)
 formatter = logging.Formatter('[%(levelname)-8s] %(message)s')
 console.setFormatter(formatter)
 logging.getLogger('').addHandler(console)
@@ -63,7 +65,7 @@ def do_requests(target, amount, ret_values, index):
                                                                                 resp.elapsed.total_seconds()))
         timings.append(resp.elapsed.total_seconds())
         responses.append(resp.status_code)
-    logging.Logger.done("Completed all requests for %s" % threading.currentThread().getName())
+    logging.info("Completed all requests for %s" % threading.currentThread().getName())
     # Stupid way to return values from a threaded method, as Py can't implement a 'return'
     ret_values[index] = {"responses": responses, "average": (sum(timings) / len(timings))}
 
@@ -91,4 +93,9 @@ logging.info("Completed %i requests in %.2f seconds" % (args.requests * args.thr
 
 # do statisticky stuff:
 print(return_values)
+total = 0
+for i in range(len(return_values)):
+    a = return_values.get(i)
+    total += a.get("average")
+print("Average response time: %f" % (total / len(return_values)))
 #{0: {'average': 0.053794, 'responses': [408, 200, 200, 200, 200]}, 1: {'average': 0.048867, 'responses': [408, 200, 200, 200, 200]}, 2: {'average': 0.052397, 'responses': [408, 200, 200, 200, 200]}, 3: {'average': 0.04803075, 'responses': [408, 200, 200, 200, 200]}, 4: {'average': 0.049209499999999996, 'responses': [408, 200, 200, 200, 200]}}
