@@ -92,10 +92,7 @@ end_time = time.time()
 logging.info("Completed %i requests in %.2f seconds" % (args.requests * args.threads, end_time - start_time))
 
 # do statisticky stuff:
-print(return_values)
-total = 0
-for i in range(len(return_values)):
-    a = return_values.get(i)
-    total += a.get("average")
-print("Average response time: %f" % (total / len(return_values)))
+# print(return_values.items())
+results = return_values.items()
+print("Average response time: %f" % (sum(map(lambda x: x[1].get("average"), results)) / len(results)))
 #{0: {'average': 0.053794, 'responses': [408, 200, 200, 200, 200]}, 1: {'average': 0.048867, 'responses': [408, 200, 200, 200, 200]}, 2: {'average': 0.052397, 'responses': [408, 200, 200, 200, 200]}, 3: {'average': 0.04803075, 'responses': [408, 200, 200, 200, 200]}, 4: {'average': 0.049209499999999996, 'responses': [408, 200, 200, 200, 200]}}
