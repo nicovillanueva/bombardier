@@ -67,14 +67,16 @@ def do_requests(target, amount, ret_values, index):
         responses.append(resp.status_code)
     logging.info("Completed all requests for %s" % threading.currentThread().getName())
     # Stupid way to return values from a threaded method, as Py can't implement a 'return'
-    ret_values[index] = {"responses": responses, "average": (sum(timings) / len(timings))}
+    #ret_values[index] = {"responses": responses, "average": (sum(timings) / len(timings))}
+    ret_values.append({"responses": responses, "average": (sum(timings) / len(timings))})
 
 start_time = time.time()
 
 threads = []
-return_values = {}
+#worker_results = {}
+worker_results = []
 for i in range(args.threads):
-    t = threading.Thread(target=do_requests, args=(args.url, args.requests, return_values, i))
+    t = threading.Thread(target=do_requests, args=(args.url, args.requests, worker_results, i))
     t.setName("worker-%i" % i)
     t.setDaemon(True)
     threads.append(t)
@@ -92,7 +94,8 @@ end_time = time.time()
 logging.info("Completed %i requests in %.2f seconds" % (args.requests * args.threads, end_time - start_time))
 
 # do statisticky stuff:
-# print(return_values.items())
-results = return_values.items()
-print("Average response time: %f" % (sum(map(lambda x: x[1].get("average"), results)) / len(results)))
+print(worker_results)
+print("Average response time: %f" % (sum(map(lambda x: x.get("average"), worker_results)) / len(worker_results)))
+
+#respcodes = map(lambda x: x.get("responses"), worker_results)  # aggregate shit
 #{0: {'average': 0.053794, 'responses': [408, 200, 200, 200, 200]}, 1: {'average': 0.048867, 'responses': [408, 200, 200, 200, 200]}, 2: {'average': 0.052397, 'responses': [408, 200, 200, 200, 200]}, 3: {'average': 0.04803075, 'responses': [408, 200, 200, 200, 200]}, 4: {'average': 0.049209499999999996, 'responses': [408, 200, 200, 200, 200]}}
