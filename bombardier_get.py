@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import requests, requests.exceptions, threading, logging, argparse, time
+import requests, requests.exceptions, threading, logging, argparse, time, sys
 
 parser = argparse.ArgumentParser(add_help=False, description="Spam GET requests, in parallel")
 
@@ -48,11 +48,13 @@ def do_requests(target, amount, ret_values, index):
         try:
             resp = requests.get(args.url, timeout=args.timeout)
         except requests.exceptions.Timeout:
-            responses.append(408)
+            responses.append(requests.codes.TIMEOUT)
+            timings.append(0)
             logging.error("Request #%i in %s timed out" % (i, threading.currentThread().getName()))
             continue
         except requests.exceptions.ConnectionError:
-            responses.append(418)
+            responses.append(requests.codes.IM_A_TEAPOT)
+            timings.append(0)
             logging.error("Request #%i in %s had a connection error" % (i, threading.currentThread().getName()))
             continue
 
@@ -67,7 +69,6 @@ def do_requests(target, amount, ret_values, index):
         responses.append(resp.status_code)
     logging.info("Completed all requests for %s" % threading.currentThread().getName())
     # Stupid way to return values from a threaded method, as Py can't implement a 'return'
-    #ret_values[index] = {"responses": responses, "average": (sum(timings) / len(timings))}
     ret_values.append({"responses": responses, "average": (sum(timings) / len(timings))})
 
 start_time = time.time()
@@ -94,8 +95,36 @@ end_time = time.time()
 logging.info("Completed %i requests in %.2f seconds" % (args.requests * args.threads, end_time - start_time))
 
 # do statisticky stuff:
-print(worker_results)
-print("Average response time: %f" % (sum(map(lambda x: x.get("average"), worker_results)) / len(worker_results)))
+averages = list(map(lambda x: x.get("average"), worker_results))
+
+def no_numpy_stats(results):
+    print("Average response time: %f" % (sum(results) / len(results)))
+
+
+def numpy_stats(results):
+    percentile80 = np.percentile(results, 80)
+    percentile99 = np.percentile(results, 99)
+    a = np.array(results)
+    mean = a.mean()
+    minimum = a.min()
+    maximum = a.max()
+    variance = a.var()
+    stddev = a.std()
+    print("80th percentile: %f" % percentile80)
+    print("99th percentile: %f" % percentile99)
+    print("Mean: %f" % mean)
+    print("Minimum: %f" % minimum)
+    print("Maximum: %f" % maximum)
+    print("Variance: %f" %  variance)
+    print("Standard Deviation: %f" % stddev)
+
+try:
+    import numpy as np
+    numpy_stats(averages)
+except ImportError:
+    no_numpy_stats(averages)
+    print("No NumPy module found, so no more statistics for you.")
+    sys.exit(0)
 
 #respcodes = map(lambda x: x.get("responses"), worker_results)  # aggregate shit
 #{0: {'average': 0.053794, 'responses': [408, 200, 200, 200, 200]}, 1: {'average': 0.048867, 'responses': [408, 200, 200, 200, 200]}, 2: {'average': 0.052397, 'responses': [408, 200, 200, 200, 200]}, 3: {'average': 0.04803075, 'responses': [408, 200, 200, 200, 200]}, 4: {'average': 0.049209499999999996, 'responses': [408, 200, 200, 200, 200]}}
