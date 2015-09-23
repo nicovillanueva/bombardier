@@ -1,6 +1,5 @@
 #!/usr/bin/python3
-
-import requests, requests.exceptions, threading, logging, argparse, time, sys
+import requests, requests.exceptions, threading, logging, argparse, time, sys, json
 
 parser = argparse.ArgumentParser(add_help=False, description="Spam GET requests, in parallel")
 
@@ -10,6 +9,7 @@ options.add_argument('-t', '--threads', type=int, required=True, help='Parallel 
 options.add_argument('-r', '--requests', type=int, required=True, help='Requests to do with each thread')
 options.add_argument('--timeout', type=int, required=False, default=5, help='Seconds after the requests timeout (default: 5)')
 options.add_argument('-l', '--logfile', type=str, required=False, default='bombardier.log', help='Where to write the log')
+options.add_argument('-d', '--dump', type=str, required=False, default=None, help='Dump each worker\'s results in a file')
 options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
 
 args = parser.parse_args()
@@ -21,19 +21,10 @@ logging.basicConfig(level=logging.DEBUG,
                     filename=args.logfile,
                     filemode='w',
                     )
-#DONE_LEVEL_NUM = 25
-#logging.addLevelName( DONE_LEVEL_NUM,  "\033[1;34m%s\033[1;0m"   % "DONE" )
 logging.addLevelName( logging.INFO,    "\033[1;32m%s\033[1;0m"   % logging.getLevelName(logging.INFO) )     # Green
 logging.addLevelName( logging.WARNING, "\033[1;33m%s\033[1;0m"   % logging.getLevelName(logging.WARNING) )  # Yellow
 logging.addLevelName( logging.ERROR,   "\033[1;31;1m%s\033[1;0m" % logging.getLevelName(logging.ERROR) )    # Bold red
-logging.getLogger("requests").setLevel(logging.WARNING)  # Squelch any requests' logging lower than WARNING
-
-"""
-def done(self, message, *args, **kws):
-    if logging.Logger.isEnabledFor(DONE_LEVEL_NUM):
-        logging.Logger._log(DONE_LEVEL_NUM, message, args, **kws)
-logging.Logger.done = done
-"""
+logging.getLogger("urllib3").setLevel(logging.WARNING)  # Squelch any requests' logging lower than WARNING
 
 console = logging.StreamHandler()  # Log to the console
 console.setLevel(logging.INFO)
@@ -59,10 +50,10 @@ def do_requests(target, amount, ret_values, index):
             continue
 
         if resp.status_code == 200:
-            logging.info("Request #%i in %s had code 200 and it took %.4f" % (i, threading.currentThread().getName(),
+            logging.info("Request #%i in %s had code 200 and it took %.4f seconds." % (i, threading.currentThread().getName(),
                                                                               resp.elapsed.total_seconds()))
         else:
-            logging.warning("Request #%i in %s had code %i and it took %.4f" % (i, threading.currentThread().getName(),
+            logging.warning("Request #%i in %s had code %i and it took %.4f seconds." % (i, threading.currentThread().getName(),
                                                                                 resp.status_code,
                                                                                 resp.elapsed.total_seconds()))
         timings.append(resp.elapsed.total_seconds())
@@ -74,7 +65,6 @@ def do_requests(target, amount, ret_values, index):
 start_time = time.time()
 
 threads = []
-#worker_results = {}
 worker_results = []
 for i in range(args.threads):
     t = threading.Thread(target=do_requests, args=(args.url, args.requests, worker_results, i))
@@ -96,6 +86,11 @@ logging.info("Completed %i requests in %.2f seconds" % (args.requests * args.thr
 
 # do statisticky stuff:
 averages = list(map(lambda x: x.get("average"), worker_results))
+if args.dump is not None:
+    with open(args.dump, mode='w') as f:
+        f.write(json.dumps(worker_results, sort_keys=True, indent=2, separators=(',', ': ')))
+
+
 
 def no_numpy_stats(results):
     print("Average response time: %f" % (sum(results) / len(results)))
@@ -125,6 +120,3 @@ except ImportError:
     no_numpy_stats(averages)
     print("No NumPy module found, so no more statistics for you.")
     sys.exit(0)
-
-#respcodes = map(lambda x: x.get("responses"), worker_results)  # aggregate shit
-#{0: {'average': 0.053794, 'responses': [408, 200, 200, 200, 200]}, 1: {'average': 0.048867, 'responses': [408, 200, 200, 200, 200]}, 2: {'average': 0.052397, 'responses': [408, 200, 200, 200, 200]}, 3: {'average': 0.04803075, 'responses': [408, 200, 200, 200, 200]}, 4: {'average': 0.049209499999999996, 'responses': [408, 200, 200, 200, 200]}}
