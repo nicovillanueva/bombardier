@@ -1,0 +1,9 @@
+In itself, bombardier does not have an installation.
+
+However, if you want to get some nifty statistics (variance, percentiles, std dev, and whatnot), you need to install a few packages:
+
+In Ubuntu-based distros:
+
+`sudo apt-get install python3-numpy python3-scipy python-matplotlib ipython ipython-notebook python-pandas python-sympy python-nose`
+
+Otherwise, you'll just get the average response time.
