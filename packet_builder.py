@@ -35,7 +35,7 @@ class SynGunner(object):
         while True:
             self.fire_once()
 
-    def stand_down():
+    def stand_down(self):
         self.sock.close()
         
 
