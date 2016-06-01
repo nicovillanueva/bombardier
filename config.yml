@@ -1,0 +1,16 @@
+target: "http://google.com"
+method: POST
+payload: >
+    {
+        "something": 1
+    }
+
+headers: >
+    {
+        "X-Its-A-Me": "Mario"
+    }
+
+cookies: >
+    {
+        "cookie": "monster"
+    }
