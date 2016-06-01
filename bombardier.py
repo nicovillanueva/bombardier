@@ -18,16 +18,17 @@ class TargetDefinition(object):
             self.payload = None
             self.headers = None
             self.cookies = None
+
     def __str__(self):
         return "target: {}, method: {}, payload: {}, headers: {}, cookies: {}"\
-                .format(self.target, self.method, self.payload, self.headers, self.cookies)
+               .format(self.target, self.method, self.payload, self.headers, self.cookies)
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(add_help=False, description="Spam GET requests, in parallel")
 
     options = parser.add_argument_group("Options")
-    options.add_argument('-u', '--url', type=str, required=True, help='URL to bombard')
+    options.add_argument('-u', '--url', type=str, required=False, help='URL to bombard')
     options.add_argument('-t', '--threads', type=int, required=True, help='Parallel threads to hit with')
     options.add_argument('-r', '--requests', type=int, required=True, help='Requests to do with each thread')
     options.add_argument('-c', '--config', type=str, required=False, help='Request configuration file to use')
@@ -47,9 +48,9 @@ def setup_logging(logfile):
                         filename=logfile,
                         filemode='w',
                         )
-    logging.addLevelName( logging.INFO,    "\033[1;32m%s\033[1;0m"   % logging.getLevelName(logging.INFO) )     # Green
-    logging.addLevelName( logging.WARNING, "\033[1;33m%s\033[1;0m"   % logging.getLevelName(logging.WARNING) )  # Yellow
-    logging.addLevelName( logging.ERROR,   "\033[1;31;1m%s\033[1;0m" % logging.getLevelName(logging.ERROR) )    # Bold red
+    logging.addLevelName(logging.INFO, "\033[1;32m%s\033[1;0m" % logging.getLevelName(logging.INFO))     # Green
+    logging.addLevelName(logging.WARNING, "\033[1;33m%s\033[1;0m" % logging.getLevelName(logging.WARNING))  # Yellow
+    logging.addLevelName(logging.ERROR, "\033[1;31;1m%s\033[1;0m" % logging.getLevelName(logging.ERROR))    # Bold red
     logging.getLogger("urllib3").setLevel(logging.WARNING)  # Squelch any requests' logging lower than WARNING
 
     console = logging.StreamHandler()  # Log to the console
@@ -83,11 +84,11 @@ def do_requests(config, amount, ret_values, workers_log=None):
 
         if resp.status_code == 200:
             logging.info("Request #%i in %s had code 200 and it took %.4f seconds." % (i, threading.currentThread().getName(),
-                                                                              resp.elapsed.total_seconds()))
+                                                                                       resp.elapsed.total_seconds()))
         else:
             logging.warning("Request #%i in %s had code %i and it took %.4f seconds." % (i, threading.currentThread().getName(),
-                                                                                resp.status_code,
-                                                                                resp.elapsed.total_seconds()))
+                                                                                         resp.status_code,
+                                                                                         resp.elapsed.total_seconds()))
         timings.append(resp.elapsed.total_seconds())
         responses.append(resp.status_code)
     logging.info("Completed all requests for %s" % threading.currentThread().getName())
@@ -143,7 +144,6 @@ def print_statistics(worker_results):
         for r in resps.keys():
             logging.info("- {amt} responses with code {code}".format(amt=resps.get(r), code=r))
 
-
     def numpy_stats(results):
         logging.info('Stats time!')
         no_numpy_stats(results)
@@ -179,8 +179,11 @@ if __name__ == '__main__':
     args = parse_arguments()
     TIMEOUT = args.timeout
     setup_logging(args.logfile)
+    if args.url is None and args.config is None:
+        logging.error("Either --url or --config is required")
+        sys.exit(1)
     sc = TargetDefinition(args.config or args.url)
-    if not is_valid_url(args.url):
+    if args.url is not None and not is_valid_url(args.url):
         logging.error("Malformed URL: {}".format(args.url))
         sys.exit(1)
     results = perform(sc, do_requests, args.threads, args.requests)
