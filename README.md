@@ -18,9 +18,8 @@ If you also want nifty statistics (max, min, percentile, etc...) you also need `
 As always, it's recommended to use virtualenvs.
 
 ## Usage
-`bombardier.py --url $url-to-hit --threads $concurrent-threads --requests $requests-each-thread-will-launch`
+`bombardier.py --url $url-to-hit --threads $parallel-threads --requests $requests-per-thread`
 
 or
 
-
-`bombardier.py --config $config-file --threads $concurrent-threads --requests $requests-each-thread-will-launch`
+`bombardier.py --config $config-file --threads $parallel-threads --requests $requests-per-thread`
