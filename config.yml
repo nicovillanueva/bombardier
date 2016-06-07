@@ -1,16 +1,19 @@
-target: "http://google.com"
-method: POST
-payload: >
-    {
-        "something": 1
-    }
+orders:
+    -
+        id: 1
+        target: "http://google.com"
+        method: POST
+        payload: >
+            {
+                "something": 1
+            }
 
-headers: >
-    {
-        "X-Its-A-Me": "Mario"
-    }
+        headers: >
+            {
+                "X-Its-A-Me": "Mario"
+            }
 
-cookies: >
-    {
-        "cookie": "monster"
-    }
+        cookies: >
+            {
+                "cookie": "monster"
+            }

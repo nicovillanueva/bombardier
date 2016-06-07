@@ -1,26 +1,83 @@
 #!/usr/bin/python3
 import requests, threading, logging, argparse, time, sys, json, yaml, urllib, os, ast
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 
+def parse_orders(orders_file):
+    with open(orders_file) as f:
+        conf = yaml.load(f)
+        for c in conf:
+            orders.append(Order(c))
+        return orders
 
-class TargetDefinition(object):
+class Order(object):
     def __init__(self, target):
-        if os.path.isfile(target):
-            with open(target) as f:
-                c = yaml.load(f)
-                self.target = c.get("target")
-                self.method = c.get("method")
-                self.payload = c.get("payload") or None
-                self.cookies = ast.literal_eval(c.get("cookies")) if c.get("cookies") else None
-                self.headers = ast.literal_eval(c.get("headers")) if c.get("headers") else None
+        if type(target) is dict:
+            self.id = target.get("id") or 1
+            self.target = target.get("target")
+            self.method = target.get("method")
+            self.payload = target.get("payload") or None
+            self.cookies = ast.literal_eval(target.get("cookies")) if target.get("cookies") else None
+            self.headers = ast.literal_eval(target.get("headers")) if target.get("headers") else None
         else:
+            self.id = 1
             self.target = target
             self.method = "GET"
             self.payload = None
             self.headers = None
             self.cookies = None
     def __str__(self):
-        return "target: {}, method: {}, payload: {}, headers: {}, cookies: {}"\
-                .format(self.target, self.method, self.payload, self.headers, self.cookies)
+        return "id: {}, target: {}, method: {}, payload: {}, headers: {}, cookies: {}"\
+                .format(self.id, self.target, self.method, self.payload, self.headers, self.cookies)
+
+class Squad(object):
+    self.soldiers = []
+    self.orders = []
+    def __init__(self, army_size, orders, ammo=10, duration=0, interval=0):
+        pass
+
+    def spawn_soldiers(self, amount):
+        # TODO: clear previous soldiers
+        for i in amount:
+            p = Soldier(name="soldier-{}".format(i), daemon=True)
+            self.soldiers.append(p)
+        print("{} soldiers standing by".format(amount))
+
+    def execute(self, order=None):
+        with ThreadPoolExecutor() as executor:
+            executor.map(lambda x: x.start(), self.soldiers)
+
+class Soldier(object):
+    class Gun(multiprocessing.Process):
+        def __init__(self, daemon=False):
+            # For clarity. May be removed
+            Gun.__init__(self, daemon=daemon)
+        def run():
+            # do request here
+            pass
+
+    # TODO: Random name from list
+    def __init__(self, orders, ammo=10, duration=0, interval=0, name="UnnamedSoldier", daemon=True):
+        super(Soldier, self).__init__()
+        self.orders = []
+        self.interval = 0
+        self.duration = 0
+        self.ammo = 0
+        print("{} is born".format(self.name))
+    #def start(order):
+
+    def run():
+        # move to Gun
+        for order in orders:  # TODO: Sequential. Make parallel!
+            for a in ammo:
+                print("{} goes pewpew".format(self.name))
+                resp = requests.request(method=order.method,
+                                        url=order.target,
+                                        data=order.payload,
+                                        headers=order.headers,
+                                        cookies=order.cookies,
+                                        timeout=TIMEOUT)
+            print("{} has ran out of ammo".format(self.name))
 
 
 def parse_arguments():
