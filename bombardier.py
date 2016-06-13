@@ -3,12 +3,18 @@ import requests, threading, logging, argparse, time, sys, json, yaml, urllib, os
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 
-def parse_orders(orders_file):
+pids_created = []
+report = []
+
+def parse_briefing(orders_file):
     with open(orders_file) as f:
+        orders = []
         conf = yaml.load(f)
+        conf = conf.get("orders")
         for c in conf:
             orders.append(Order(c))
         return orders
+
 
 class Order(object):
     def __init__(self, target):
@@ -26,62 +32,96 @@ class Order(object):
             self.payload = None
             self.headers = None
             self.cookies = None
+
     def __str__(self):
         return "id: {}, target: {}, method: {}, payload: {}, headers: {}, cookies: {}"\
                 .format(self.id, self.target, self.method, self.payload, self.headers, self.cookies)
 
-class Squad(object):
-    self.soldiers = []
-    self.orders = []
-    def __init__(self, army_size, orders, ammo=10, duration=0, interval=0):
-        pass
 
-    def spawn_soldiers(self, amount):
+class Squad(object):
+    def __init__(self, army_size, orders, ammo=10, duration=0, interval=0):
+        self.soldiers = self.spawn_soldiers(army_size, orders, ammo, duration, interval)
+        self.orders = orders
+
+    def spawn_soldiers(self, amount, orders, ammo, duration, interval):
         # TODO: clear previous soldiers
-        for i in amount:
-            p = Soldier(name="soldier-{}".format(i), daemon=True)
-            self.soldiers.append(p)
-        print("{} soldiers standing by".format(amount))
+        new_soldiers = []
+        [new_soldiers.append(Soldier(orders, ammo, duration, interval, name="soldier-{}".format(i))) for i in range(amount)]
+        print("{} new soldiers standing by".format(amount))
+        return new_soldiers
 
     def execute(self, order=None):
-        with ThreadPoolExecutor() as executor:
-            executor.map(lambda x: x.start(), self.soldiers)
+        for s in self.soldiers:  # TODO: Parallelize
+            s.fire()
+        #with ThreadPoolExecutor() as executor:
+        #    executor.map(lambda x: x.fire(), self.soldiers)
+
+
+class Weapon(multiprocessing.Process):
+    def __init__(self, ammo, target, owner=None):
+        pids_created.append(os.getpid())
+        super().__init__()
+        self.owner = owner
+        self.daemon = False
+        self.ammo = ammo
+        self.target = target
+
+    def run(self):
+        timeout = 10  # TODO: Throw somewhere else
+        for _ in range(self.ammo):
+            try:
+                resp = requests.request(method=self.target.method,
+                                        url=self.target.target,
+                                        data=self.target.payload,
+                                        headers=self.target.headers,
+                                        cookies=self.target.cookies,
+                                        timeout=timeout)
+            except requests.exceptions.Timeout:
+                report.append({
+                    "target": self.target.target,
+                    "code": "TIMEOUT",
+                    "time": timeout
+                })
+                continue
+            except requests.exceptions.ConnectionError:
+                report.append({
+                    "target": self.target.target,
+                    "code": "CONNECTION_ERROR",
+                    "time": 0
+                })
+                continue
+            report.append({
+                "target": self.target.target,
+                "code": resp.status_code,
+                "time": resp.elapsed.total_seconds()
+            })
+            print(self.owner, self.target.target, resp.status_code)
+        print("Weapon of {} is out of ammo".format(self.owner))
+
 
 class Soldier(object):
-    class Gun(multiprocessing.Process):
-        def __init__(self, daemon=False):
-            # For clarity. May be removed
-            Gun.__init__(self, daemon=daemon)
-        def run():
-            # do request here
-            pass
-
     # TODO: Random name from list
-    def __init__(self, orders, ammo=10, duration=0, interval=0, name="UnnamedSoldier", daemon=True):
-        super(Soldier, self).__init__()
-        self.orders = []
-        self.interval = 0
-        self.duration = 0
-        self.ammo = 0
+    def __init__(self, orders, ammo=10, duration=0, interval=0, name="UnnamedSoldier"):
+        self.name = name
+        self.orders = orders
+        self.ammo = ammo
+        self.duration = duration
+        self.interval = interval
+        self.casualties_report = {}
         print("{} is born".format(self.name))
-    #def start(order):
 
-    def run():
-        # move to Gun
-        for order in orders:  # TODO: Sequential. Make parallel!
-            for a in ammo:
-                print("{} goes pewpew".format(self.name))
-                resp = requests.request(method=order.method,
-                                        url=order.target,
-                                        data=order.payload,
-                                        headers=order.headers,
-                                        cookies=order.cookies,
-                                        timeout=TIMEOUT)
-            print("{} has ran out of ammo".format(self.name))
+    def fire(self):
+        for order in self.orders:  # TODO: Sequential. Make parallel!
+            print(self.name, "shooting:", order.target)
+            g = Weapon(self.ammo, order, self.name)
+            g.start()
+            g.join()
+
+
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(add_help=False, description="Spam GET requests, in parallel")
+    parser = argparse.ArgumentParser(add_help=False, description="Spam requests, in parallel")
 
     options = parser.add_argument_group("Options")
     options.add_argument('-u', '--url', type=str, required=True, help='URL to bombard')
@@ -115,7 +155,7 @@ def setup_logging(logfile):
     console.setFormatter(formatter)
     logging.getLogger('').addHandler(console)
 
-
+"""
 def do_requests(config, amount, ret_values, workers_log=None):
     global TIMEOUT
     responses = []
@@ -179,7 +219,7 @@ def perform(config, threaded_method, worker_amount, worker_efforts, workers_log=
         with open(workers_log) as f:
             f.write(json.dumps(ret_values))
     return worker_results
-
+"""
 
 def print_statistics(worker_results):
     averages = list(map(lambda x: x.get("average"), worker_results))
@@ -230,8 +270,14 @@ def is_valid_url(url, qualifying=None):
     return all([getattr(token, qualifying_attr)
                 for qualifying_attr in qualifying])
 
+def teardown():
+    print("Killing:")
+    print(pids_created)
+    [os.kill(p, 9) for p in pids_created]
 
-if __name__ == '__main__':
+
+#if __name__ == '__main__':
+def pepepepe():
     global TIMEOUT
     args = parse_arguments()
     TIMEOUT = args.timeout
@@ -242,3 +288,14 @@ if __name__ == '__main__':
         sys.exit(1)
     results = perform(sc, do_requests, args.threads, args.requests)
     print_statistics(results)
+
+#rmy_size, orders, ammo=10, duration=0, interval=0
+# t = [Order("http://www.google.com")]
+try:
+    t = parse_briefing("config.yml")
+    s = Squad(5, t, 5, 0, 0)
+    s.execute()
+finally:
+    teardown()
+#g = Weapon(3, Order("http://www.google.com"), daemon=True)
+#g.start()

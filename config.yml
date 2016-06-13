@@ -17,3 +17,22 @@ orders:
             {
                 "cookie": "monster"
             }
+
+    -
+        id: 2
+        target: "http://httpbin.org/ip"
+        method: GET
+        payload: >
+            {
+                "something": 1
+            }
+
+        headers: >
+            {
+                "X-Its-A-Me": "Bombomb"
+            }
+
+        cookies: >
+            {
+                "cookie": "monster"
+            }
