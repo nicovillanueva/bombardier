@@ -1,9 +1,9 @@
-#!/usr/bin/python3
-import requests, threading, logging, argparse, time, sys, json, yaml, urllib, os, ast
-import multiprocessing
+#!/usr/bin/env python3
+
+import requests, logging, argparse, time, sys, json, yaml, urllib, os, ast, random
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
-pids_created = []
 report = []
 
 def parse_briefing(orders_file):
@@ -39,27 +39,64 @@ class Order(object):
 
 
 class Squad(object):
-    def __init__(self, army_size, orders, ammo=10, duration=0, interval=0):
-        self.soldiers = self.spawn_soldiers(army_size, orders, ammo, duration, interval)
+    def __init__(self, army_size, orders, ammo=10, duration=0, interval=0, names_list='roster.txt'):
         self.orders = orders
+        self.names_list = names_list
+        self.names = None
+        self.naming_index = 0
+        self.soldiers = self.spawn_soldiers(army_size, orders, ammo, duration, interval)
+
+    def get_name(self):
+        if self.names is None:
+            with open(self.names_list) as f:
+                self.names = list(map(lambda x: x.strip(), f.readlines()))
+        return random.choice(self.names)
+
+    def get_name_index(self):
+        i = self.naming_index
+        self.naming_index += 1
+        return 'Soldier-{}'.format(i)
 
     def spawn_soldiers(self, amount, orders, ammo, duration, interval):
-        # TODO: clear previous soldiers
+        # TODO: what naming function to use?
+        #namer = self.get_name
+        namer = self.get_name_index
         new_soldiers = []
-        [new_soldiers.append(Soldier(orders, ammo, duration, interval, name="soldier-{}".format(i))) for i in range(amount)]
+        [new_soldiers.append(Soldier(orders, ammo, duration, interval, name=namer)) for i in range(amount)]
         print("{} new soldiers standing by".format(amount))
         return new_soldiers
 
     def execute(self, order=None):
-        for s in self.soldiers:  # TODO: Parallelize
-            s.fire()
-        #with ThreadPoolExecutor() as executor:
-        #    executor.map(lambda x: x.fire(), self.soldiers)
+        with ThreadPoolExecutor() as executor:
+            executor.map(lambda x: x.fire(), self.soldiers)
+        print("all soldiers firing")
+        main_th = threading.currentThread()
+        [t.join() for t in threading.enumerate() if t is not main_th]
+        print("all soldiers done")
 
 
-class Weapon(multiprocessing.Process):
+class Soldier(object):
+    def __init__(self, orders, ammo=10, duration=0, interval=0, name=None):
+        try:
+            self.name = name()
+        except TypeError:
+            self.name = name
+        assert type(self.name) is str
+        self.orders = orders
+        self.ammo = ammo
+        self.duration = duration
+        self.interval = interval
+        print("{} is born".format(self.name))
+
+    def fire(self):
+        s = lambda x: (Weapon(self.ammo, x, self.name)).start()
+        with ThreadPoolExecutor() as executor:
+            executor.map(s, self.orders)
+        print("Done all orders for {}".format(self.name))
+
+
+class Weapon(threading.Thread):
     def __init__(self, ammo, target, owner=None):
-        pids_created.append(os.getpid())
         super().__init__()
         self.owner = owner
         self.daemon = False
@@ -67,6 +104,7 @@ class Weapon(multiprocessing.Process):
         self.target = target
 
     def run(self):
+        global report
         timeout = 10  # TODO: Throw somewhere else
         for _ in range(self.ammo):
             try:
@@ -99,27 +137,6 @@ class Weapon(multiprocessing.Process):
         print("Weapon of {} is out of ammo".format(self.owner))
 
 
-class Soldier(object):
-    # TODO: Random name from list
-    def __init__(self, orders, ammo=10, duration=0, interval=0, name="UnnamedSoldier"):
-        self.name = name
-        self.orders = orders
-        self.ammo = ammo
-        self.duration = duration
-        self.interval = interval
-        self.casualties_report = {}
-        print("{} is born".format(self.name))
-
-    def fire(self):
-        for order in self.orders:  # TODO: Sequential. Make parallel!
-            print(self.name, "shooting:", order.target)
-            g = Weapon(self.ammo, order, self.name)
-            g.start()
-            g.join()
-
-
-
-
 def parse_arguments():
     parser = argparse.ArgumentParser(add_help=False, description="Spam requests, in parallel")
 
@@ -148,6 +165,7 @@ def setup_logging(logfile):
     logging.addLevelName( logging.WARNING, "\033[1;33m%s\033[1;0m"   % logging.getLevelName(logging.WARNING) )  # Yellow
     logging.addLevelName( logging.ERROR,   "\033[1;31;1m%s\033[1;0m" % logging.getLevelName(logging.ERROR) )    # Bold red
     logging.getLogger("urllib3").setLevel(logging.WARNING)  # Squelch any requests' logging lower than WARNING
+    logging.getLogger("requests").setLevel(logging.WARNING)
 
     console = logging.StreamHandler()  # Log to the console
     console.setLevel(logging.INFO)
@@ -221,45 +239,51 @@ def perform(config, threaded_method, worker_amount, worker_efforts, workers_log=
     return worker_results
 """
 
-def print_statistics(worker_results):
-    averages = list(map(lambda x: x.get("average"), worker_results))
-    if args.dump is not None:
-        with open(args.dump, mode='w') as f:
-            f.write(json.dumps(worker_results, sort_keys=True, indent=2, separators=(',', ': ')))
+def print_statistics(results):
+    # averages = list(map(lambda x: x.get("average"), results))
+    # if args.dump is not None:
+    #     with open(args.dump, mode='w') as f:
+    #         f.write(json.dumps(results, sort_keys=True, indent=2, separators=(',', ': ')))
 
-    def no_numpy_stats(results):
-        logging.info("Average time: %f" % (sum(results) / len(results)))
-        wrs = []
-        [wrs.extend(wr.get("responses")) for wr in worker_results]
+    def no_numpy_stats(codes, times):
+        avg = sum(times) / len(times)
+        logging.info('Average time: {}'.format(avg))
         resps = {}
-        for r in wrs:
+        for r in codes:
             if r not in resps.keys():
                 resps[r] = 1
             else:
                 resps[r] += 1
         for r in resps.keys():
-            logging.info("- {amt} responses with code {code}".format(amt=resps.get(r), code=r))
+            logging.info('- {amt} responses with code {code}'.format(amt=resps.get(r), code=r))
 
 
-    def numpy_stats(results):
+    def numpy_stats(codes, times):
         logging.info('Stats time!')
-        no_numpy_stats(results)
-        a = np.array(results)
-        logging.info("80th percentile: {}".format(np.percentile(results, 80)))
-        logging.info("99th percentile: {}".format(np.percentile(results, 99)))
-        logging.info("Minimum: {}".format(a.min()))
-        logging.info("Maximum: {}".format(a.max()))
-        logging.info("Variance: {}".format(a.var()))
-        logging.info("Standard Deviation: {}".format(a.std()))
+        no_numpy_stats(codes, times)
+        t = np.array(times)
+        c = np.array(codes)
+        logging.info("Timings:")
+        logging.info("80th percentile: {}".format(np.percentile(t, 80)))
+        logging.info("99th percentile: {}".format(np.percentile(t, 99)))
+        logging.info("Minimum: {}".format(t.min()))
+        logging.info("Maximum: {}".format(t.max()))
+        logging.info("Variance: {}".format(t.var()))
+        logging.info("Standard Deviation: {}".format(t.std()))
+        logging.info("Codes:")
+        logging.info("80th percentile: {}".format(np.percentile(c, 80)))
+        logging.info("99th percentile: {}".format(np.percentile(c, 99)))
 
-    if len(averages) is 0:
+    if len(results) is 0:
         logging.warn("No requests really made. Nothing to do.")
         sys.exit(0)
+    codes = list(map(lambda x: x.get('code'), results))
+    times = list(map(lambda x: x.get('time'), results))
     try:
         import numpy as np
-        numpy_stats(averages)
+        numpy_stats(codes, times)
     except ImportError:
-        no_numpy_stats(averages)
+        no_numpy_stats(codes, times)
         logging.warn("No NumPy module found, so no more statistics for you.")
 
 
@@ -270,10 +294,10 @@ def is_valid_url(url, qualifying=None):
     return all([getattr(token, qualifying_attr)
                 for qualifying_attr in qualifying])
 
-def teardown():
-    print("Killing:")
-    print(pids_created)
-    [os.kill(p, 9) for p in pids_created]
+#def teardown():
+#    print("Killing:")
+#    print(pids_created)
+#    [os.kill(p, 9) for p in pids_created]
 
 
 #if __name__ == '__main__':
@@ -289,13 +313,10 @@ def pepepepe():
     results = perform(sc, do_requests, args.threads, args.requests)
     print_statistics(results)
 
-#rmy_size, orders, ammo=10, duration=0, interval=0
-# t = [Order("http://www.google.com")]
-try:
-    t = parse_briefing("config.yml")
-    s = Squad(5, t, 5, 0, 0)
-    s.execute()
-finally:
-    teardown()
-#g = Weapon(3, Order("http://www.google.com"), daemon=True)
-#g.start()
+setup_logging("atk.log")
+t = parse_briefing("config.yml")
+s = Squad(army_size=3, orders=t, ammo=2, duration=0, interval=0)
+s.execute()
+# TODO: Wait for no more threads (not relying in daemons)
+print(report)
+print_statistics(report)

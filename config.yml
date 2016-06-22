@@ -10,7 +10,8 @@ orders:
 
         headers: >
             {
-                "X-Its-A-Me": "Mario"
+                "X-Its-A-Me": "Mario",
+                "X-Purpose": "Testing"
             }
 
         cookies: >
