@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 
 import requests, logging, argparse, time, sys, json, yaml, urllib, os, ast, random
-import threading
+import threading, colorama
 from concurrent.futures import ThreadPoolExecutor
 
 report = []
+config = None
 
 def parse_briefing(orders_file):
+    global config
     with open(orders_file) as f:
         orders = []
         conf = yaml.load(f)
-        conf = conf.get("orders")
-        for c in conf:
-            orders.append(Order(c))
-        return orders
+        sq = conf.get("squad") or conf.get("workers")
+        targets = conf.get("orders") or conf.get("targets")
+        config = conf.get("config")
+        for t in targets:
+            orders.append(Order(t))
+        return orders, sq
 
 
 class Order(object):
@@ -58,21 +62,25 @@ class Squad(object):
         return 'Soldier-{}'.format(i)
 
     def spawn_soldiers(self, amount, orders, ammo, duration, interval):
+        global config
+        namer = self.get_name_index if config.get("indexed_names") else self.get_name
         # TODO: what naming function to use?
         #namer = self.get_name
-        namer = self.get_name_index
+        #namer = self.get_name_index
         new_soldiers = []
         [new_soldiers.append(Soldier(orders, ammo, duration, interval, name=namer)) for i in range(amount)]
-        print("{} new soldiers standing by".format(amount))
+        logging.debug("{} new soldiers standing by".format(amount))
         return new_soldiers
 
     def execute(self, order=None):
+        start = time.time()
         with ThreadPoolExecutor() as executor:
             executor.map(lambda x: x.fire(), self.soldiers)
-        print("all soldiers firing")
         main_th = threading.currentThread()
         [t.join() for t in threading.enumerate() if t is not main_th]
-        print("all soldiers done")
+        end = time.time()
+        delta = end - start
+        logging.info("All soldiers done in {} seconds".format(delta))
 
 
 class Soldier(object):
@@ -86,55 +94,58 @@ class Soldier(object):
         self.ammo = ammo
         self.duration = duration
         self.interval = interval
-        print("{} is born".format(self.name))
+        logging.debug("{} is born".format(self.name))
 
     def fire(self):
-        s = lambda x: (Weapon(self.ammo, x, self.name)).start()
-        with ThreadPoolExecutor() as executor:
-            executor.map(s, self.orders)
-        print("Done all orders for {}".format(self.name))
+        for order in self.orders:
+            for _ in range(self.ammo):
+                w = Weapon(order, self.name)
+                w.start()
+                time.sleep(self.interval)
+        logging.info("Given all orders for {}".format(self.name))
 
 
 class Weapon(threading.Thread):
-    def __init__(self, ammo, target, owner=None):
+    #def __init__(self, ammo, target, owner=None):
+    def __init__(self, target, owner=None):
         super().__init__()
         self.owner = owner
         self.daemon = False
-        self.ammo = ammo
+        #self.ammo = ammo
         self.target = target
 
     def run(self):
         global report
         timeout = 10  # TODO: Throw somewhere else
-        for _ in range(self.ammo):
-            try:
-                resp = requests.request(method=self.target.method,
-                                        url=self.target.target,
-                                        data=self.target.payload,
-                                        headers=self.target.headers,
-                                        cookies=self.target.cookies,
-                                        timeout=timeout)
-            except requests.exceptions.Timeout:
-                report.append({
-                    "target": self.target.target,
-                    "code": "TIMEOUT",
-                    "time": timeout
-                })
-                continue
-            except requests.exceptions.ConnectionError:
-                report.append({
-                    "target": self.target.target,
-                    "code": "CONNECTION_ERROR",
-                    "time": 0
-                })
-                continue
+        #for _ in range(self.ammo):
+        try:
+            resp = requests.request(method=self.target.method,
+                                    url=self.target.target,
+                                    data=self.target.payload,
+                                    headers=self.target.headers,
+                                    cookies=self.target.cookies,
+                                    timeout=timeout)
+        except requests.exceptions.Timeout:
             report.append({
                 "target": self.target.target,
-                "code": resp.status_code,
-                "time": resp.elapsed.total_seconds()
+                "code": "TIMEOUT",
+                "time": timeout
             })
-            print(self.owner, self.target.target, resp.status_code)
-        print("Weapon of {} is out of ammo".format(self.owner))
+            return
+        except requests.exceptions.ConnectionError:
+            report.append({
+                "target": self.target.target,
+                "code": "CONNECTION_ERROR",
+                "time": 0
+            })
+            return
+        report.append({
+            "target": self.target.target,
+            "code": resp.status_code,
+            "time": resp.elapsed.total_seconds()
+        })
+        logging.debug("{} {} {}".format(self.owner, self.target.target, resp.status_code))
+        #print("Weapon of {} is out of ammo".format(self.owner))
 
 
 def parse_arguments():
@@ -154,6 +165,7 @@ def parse_arguments():
 
 
 def setup_logging(logfile):
+    global config
     FORMAT = '%(asctime)-15s %(threadName)-10s %(levelname)s %(message)s'
 
     logging.basicConfig(level=logging.DEBUG,
@@ -161,14 +173,15 @@ def setup_logging(logfile):
                         filename=logfile,
                         filemode='w',
                         )
-    logging.addLevelName( logging.INFO,    "\033[1;32m%s\033[1;0m"   % logging.getLevelName(logging.INFO) )     # Green
-    logging.addLevelName( logging.WARNING, "\033[1;33m%s\033[1;0m"   % logging.getLevelName(logging.WARNING) )  # Yellow
-    logging.addLevelName( logging.ERROR,   "\033[1;31;1m%s\033[1;0m" % logging.getLevelName(logging.ERROR) )    # Bold red
+    logging.addLevelName(logging.DEBUG, colorama.Fore.BLUE + 'DEBUG' + colorama.Fore.RESET)
+    logging.addLevelName(logging.INFO, colorama.Fore.GREEN + 'INFO' + colorama.Fore.RESET)
+    logging.addLevelName(logging.WARNING, colorama.Fore.YELLOW + 'WARNING' + colorama.Fore.RESET)
+    logging.addLevelName(logging.ERROR, colorama.Fore.RED + 'ERROR' + colorama.Fore.RESET)
     logging.getLogger("urllib3").setLevel(logging.WARNING)  # Squelch any requests' logging lower than WARNING
     logging.getLogger("requests").setLevel(logging.WARNING)
 
     console = logging.StreamHandler()  # Log to the console
-    console.setLevel(logging.INFO)
+    console.setLevel(logging.DEBUG if config.get("verbose") else logging.INFO)
     formatter = logging.Formatter('[%(levelname)-8s] %(message)s')
     console.setFormatter(formatter)
     logging.getLogger('').addHandler(console)
@@ -313,10 +326,10 @@ def pepepepe():
     results = perform(sc, do_requests, args.threads, args.requests)
     print_statistics(results)
 
+t, s = parse_briefing("config.yml")
 setup_logging("atk.log")
-t = parse_briefing("config.yml")
-s = Squad(army_size=3, orders=t, ammo=2, duration=0, interval=0)
+s = Squad(army_size=s.get("size"), orders=t, ammo=s.get("ammo"), duration=s.get("duration"), interval=s.get("interval"))
 s.execute()
-# TODO: Wait for no more threads (not relying in daemons)
-print(report)
+
+#print(report)
 print_statistics(report)

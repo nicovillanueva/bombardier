@@ -1,7 +1,17 @@
+squad:
+    size: 5
+    ammo: 10
+    interval: 0
+    duration: 0
+
+config:
+    verbose: False
+    indexed_names: False
+
 orders:
     -
         id: 1
-        target: "http://google.com"
+        target: "http://viajeros.com"
         method: POST
         payload: >
             {
@@ -16,7 +26,7 @@ orders:
 
         cookies: >
             {
-                "cookie": "monster"
+                "hello": "fuckyou"
             }
 
     -
